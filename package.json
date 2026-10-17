@@ -1,0 +1,15 @@
+{
+  "name": "ios-scrabble",
+  "version": "1.0.0",
+  "description": "Single-file HTML Scrabble pass-and-play game for iPad, viewed via HTML Viewer Q",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test 'src/game/__tests__/**/*.test.js'",
+    "build:dict": "node build/make-dawg.js",
+    "build": "node build/bundle.js",
+    "build:all": "npm run build:dict && npm run build",
+    "verify:offline": "node build/verify-offline.js"
+  },
+  "dependencies": {}
+}

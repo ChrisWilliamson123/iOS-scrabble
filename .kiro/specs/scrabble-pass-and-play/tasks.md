@@ -2,12 +2,12 @@
 
 This plan builds the game bottom-up: pure logic modules first (fully unit-testable in Node, no DOM), then the dictionary pipeline, then the runtime/rendering layer, then the build script that produces the single distributable file, and finally on-device verification against the actual iPad + HTML Viewer Q target. Each task references the requirements it satisfies.
 
-- [ ] 1. Resolve CSW word list sourcing and licensing
-  - Decide on the source for the Collins Scrabble Words list: licensed purchase, a genuinely open-license alternative word list, or an accepted-risk unofficial source — this is a deliberate decision, not a default
-  - Document the chosen source and its license/provenance in `src/dictionary/SOURCE.md`
-  - Obtain the raw word list as a plain uppercase, one-word-per-line `.txt` file and place it at `src/dictionary/csw.txt`
+- [x] 1. Resolve word list sourcing and licensing
+  - Decided against Collins Scrabble Words (commercial, no official open-license distribution) in favour of **SCOWL** (British English, size 70) — a permissively-licensed open word list
+  - Documented the chosen source, generation command, and license obligations in `src/dictionary/SOURCE.md`, with the full original license text preserved in `src/dictionary/SCOWL-COPYRIGHT.txt`
+  - Generated and committed the raw word list (126,594 lowercase, pure-alphabetic words) at `src/dictionary/wordlist-en-gb.txt`
   - _Requirements: 7.1_
-  - _Design: Risks & Open Items #5_
+  - _Design: Risks & Open Items #1_
 
 - [ ] 2. Scaffold the source project structure
   - Create `src/game/`, `src/dictionary/`, `build/`, `tests/` (already exists), `dist/` directories per the design's module breakdown
@@ -39,21 +39,21 @@ This plan builds the game bottom-up: pure logic modules first (fully unit-testab
   - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
 - [ ] 6. Implement the dictionary build pipeline
-  - [ ] 6.1 Implement `build/make-dawg.js`: read `src/dictionary/csw.txt`, build a trie, minimize into a DAWG by merging equivalent suffix subtrees
+  - [ ] 6.1 Implement `build/make-dawg.js`: read `src/dictionary/wordlist-en-gb.txt`, build a trie, minimize into a DAWG by merging equivalent suffix subtrees
     - _Requirements: 7.1_
     - _Design: Dictionary Design — Build-time generation_
   - [ ] 6.2 Implement the binary node serialization (letter byte + end-of-word bit + delta/varint-encoded child indices) and base64 encoding, writing `build/dawg.bin.b64`
     - _Requirements: 7.1_
-  - [ ] 6.3 Write unit tests using a small known word list (not the full CSW): encode to DAWG, decode, and verify lookups match exactly (valid words found, near-miss words rejected, prefix-only strings rejected)
+  - [ ] 6.3 Write unit tests using a small known word list (not the full 126K-word list): encode to DAWG, decode, and verify lookups match exactly (valid words found, near-miss words rejected, prefix-only strings rejected)
     - _Requirements: 7.1, 7.2_
-  - [ ] 6.4 Run the real pipeline against the sourced `csw.txt` once Task 1 is complete; record the resulting artifact size and compare against the file-size budget noted in the design's Risks section
+  - [ ] 6.4 Run the real pipeline against `src/dictionary/wordlist-en-gb.txt` (already sourced in Task 1); record the resulting artifact size and compare against the file-size budget noted in the design's Risks section
     - _Requirements: 7.1_
 
 - [ ] 7. Implement the runtime dictionary module (`src/game/dictionary.js`)
   - Implement base64 decode + DAWG node array parsing from the embedded blob (at this stage, load `build/dawg.bin.b64` directly from disk for testing; wiring to the embedded `<script>` tag happens in the build step, Task 13)
   - Implement `isValidWord(word) -> boolean` via DAWG traversal
   - Implement `checkWord(word) -> boolean` as the public API reused by the standalone lookup tool
-  - Write unit tests against the real built CSW DAWG: known valid words, known invalid words, 2-letter word edge cases, words containing Q without a following U
+  - Write unit tests against the real built SCOWL-derived DAWG: known valid words, known invalid words, 2-letter word edge cases, words containing Q without a following U
   - _Requirements: 7.2, 7.3_
 
 - [ ] 8. Implement move validation (`src/game/moveValidation.js`)

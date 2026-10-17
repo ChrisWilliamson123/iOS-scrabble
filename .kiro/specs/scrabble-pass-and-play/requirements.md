@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This feature is a single-file HTML implementation of Scrabble, designed for two players sharing one iOS device in a "pass-and-play" style, rendered inside an HTML viewer app. The game must be fully self-contained (no network access, no external files), must protect each player's rack from being seen by the other during handoffs, must support navigating a 15×15 board on a small touch screen, and must validate words against an embedded UK Scrabble dictionary (SOWPODS / Collins Scrabble Words).
+This feature is a single-file HTML implementation of Scrabble, designed for two players sharing one iOS device in a "pass-and-play" style, rendered inside an HTML viewer app. The game must be fully self-contained (no network access, no external files), must protect each player's rack from being seen by the other during handoffs, must support navigating a 15×15 board on a small touch screen, and must validate words against an embedded British English word list with an open/permissive license (SCOWL — see design doc for details on why this was chosen over the commercial Collins Scrabble Words list).
 
 ## Requirements
 
@@ -81,11 +81,11 @@ This feature is a single-file HTML implementation of Scrabble, designed for two 
 
 ### Requirement 7: Dictionary
 
-**User Story:** As a player, I want word validity checked against a standard UK Scrabble dictionary, so that only legitimate words can be played.
+**User Story:** As a player, I want word validity checked against a British English word list, so that only legitimate words can be played.
 
 #### Acceptance Criteria
 
-1. WHEN the game file is built THEN the system SHALL embed a SOWPODS / Collins Scrabble Words (CSW) word list directly within the HTML file, compressed/encoded to minimize file size (e.g., trie or delta-encoded structure rather than a flat list).
+1. WHEN the game file is built THEN the system SHALL embed an open/permissively-licensed British English word list (SCOWL-derived) directly within the HTML file, compressed/encoded to minimize file size (e.g., trie or delta-encoded structure rather than a flat list), with its license notice preserved per the terms in `src/dictionary/SOURCE.md`.
 2. WHEN validating a move THEN the system SHALL check word validity entirely offline using the embedded dictionary, with no network lookups.
 3. WHEN a player wants to check a word outside of placing tiles THEN the system SHALL provide a dictionary lookup tool to verify whether a given word is valid.
 

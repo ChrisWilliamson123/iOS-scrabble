@@ -4,6 +4,8 @@
 
 This document describes the technical design for a single-file HTML Scrabble game for two players, played pass-and-play style on a shared iOS device, rendered inside a generic local HTML viewer app (e.g., "HTML Viewer Q"). **The primary target device is iPad** — this shapes layout, touch-target sizing, and the board navigation strategy described below.
 
+**Dictionary note:** the word list used for validation is **SCOWL** (British English, size 70), not Collins Scrabble Words (CSW). CSW is commercial IP with no official open-license distribution; SCOWL is a genuinely open/permissively-licensed alternative, chosen deliberately over an unofficial/unclear-provenance CSW dump. See `src/dictionary/SOURCE.md` for the full sourcing and license details, and the Dictionary Design section below for how it's compressed and embedded.
+
 Two important platform constraints drive much of this design:
 
 1. **Persistence — verified.** A dedicated smoke test (`tests/localstorage-smoke-test.html`) was run on the actual target app, HTML Viewer Q, on iPad. `localStorage` was confirmed to survive app backgrounding, full force-quit + relaunch, and even re-importing the same file from Files/iCloud Drive (a counter value persisted and kept incrementing across all of these). This means `localStorage` can be treated as a **reliable primary store**, not just a best-effort cache. A manual export/import (JSON) feature is still included (see Persistence Design) as a convenience for moving a save between devices and as cheap insurance, but it is no longer load-bearing for basic "don't lose my game" correctness.
@@ -17,7 +19,7 @@ To keep the game maintainable (vs. hand-editing one giant HTML file), the implem
 
 ```mermaid
 graph LR
-    A[src/dictionary/csw.txt<br/>raw word list] --> B[build/make-dawg.js<br/>builds compressed trie]
+    A[src/dictionary/wordlist-en-gb.txt<br/>raw SCOWL word list] --> B[build/make-dawg.js<br/>builds compressed trie]
     B --> C[build/dawg.bin.b64<br/>generated artifact]
     D[src/styles.css] --> E[build/bundle.js]
     F[src/game/*.js] --> E
@@ -155,22 +157,26 @@ Stored as a constant table consumed by `bag.js` (to build the initial bag) and `
 
 ## Dictionary Design (Requirement 7)
 
+### Word list choice: SCOWL (British English) instead of CSW
+
+Collins Scrabble Words (CSW) is commercial, copyrighted IP owned by HarperCollins with no official free/open-license distribution — using it would mean either paying for a license or relying on an unofficial text dump of unclear provenance. Per explicit decision, this project instead uses **SCOWL** (English Speller Database / ESDB, maintained at [en-wl/wordlist](https://github.com/en-wl/wordlist)), generated as a British-English, size-70 word list and filtered down to pure alphabetic entries — **126,594 words**. SCOWL's base license is permissive/BSD-like (full text in `src/dictionary/SCOWL-COPYRIGHT.txt`; sourcing and generation steps fully documented in `src/dictionary/SOURCE.md`). This is a smaller list than CSW (~280K) or TWL (~180K) and will disagree with official Scrabble dictionaries on specific edge-case words, but is fit for purpose and legally clean.
+
 ### Why a trie/DAWG instead of a flat word list
 
-Collins Scrabble Words (CSW) is ~280,000+ entries. A flat JSON array of words, even newline-joined, would be several MB of mostly-repeated prefixes/suffixes (e.g., thousands of words share "-ING", "-ED", "-TION"). A **trie** collapses shared prefixes; a **DAWG** (Directed Acyclic Word Graph) additionally collapses shared *suffixes* by merging identical sub-trees, which is dramatically smaller for large natural-language-like word lists. This directly satisfies Req 7.1's call for "trie or delta-encoded" embedding.
+Even at ~127K entries, a flat JSON array of words, newline-joined, would be over a megabyte of mostly-repeated prefixes/suffixes (e.g., thousands of words share "-ING", "-ED", "-TION"). A **trie** collapses shared prefixes; a **DAWG** (Directed Acyclic Word Graph) additionally collapses shared *suffixes* by merging identical sub-trees, which is dramatically smaller for large natural-language-like word lists. This directly satisfies Req 7.1's call for "trie or delta-encoded" embedding.
 
 ### Build-time generation
 
-`build/make-dawg.js` (Node, run once per CSW release, not at game runtime):
+`build/make-dawg.js` (Node, run once per word-list update, not at game runtime):
 
-1. Read the raw CSW word list (one word per line, uppercase, A–Z only).
+1. Read the raw word list (`src/dictionary/wordlist-en-gb.txt`, one word per line, lowercase, A–Z only — normalized to uppercase during processing to match board tile letters).
 2. Build a trie, then minimize it into a DAWG by merging equivalent suffix subtrees (standard incremental DAWG construction: insert words in sorted order, maintain a register of previously-seen equivalent states to merge).
 3. Serialize the DAWG as a flat array of nodes, where each node is `{ letter, isWord, children: [childNodeIndices] }`, packed into a compact binary format:
    - Each node: 1 byte letter (A–Z mapped to 1–26, 0 reserved), 1 bit "is end of word", variable-length child index list (delta + varint encoded since indices cluster).
    - Resulting byte buffer is base64-encoded for safe embedding inside a `<script type="text/plain">` tag (avoids `</script>` collision issues that raw binary-as-string could hit).
 4. Output `build/dawg.bin.b64`, consumed by `build/bundle.js` during the final HTML assembly.
 
-Expected size: DAWGs for large English word lists of this size typically land in the low hundreds of KB to ~1–2MB packed (exact figure depends on CSW edition and final encoding efficiency) — this will be measured against the file-size budget (see Risks) once the real word list is sourced, and the encoding tuned (e.g., adding a lightweight bit-packing pass) if it runs large.
+Expected size: given ~127K words with substantial shared prefixes/suffixes, the packed DAWG should land well under 1MB (meaningfully smaller than the low-end estimate previously made for a CSW-scale list) — this will be confirmed once Task 6 actually runs the build, and the encoding tuned further if needed.
 
 ### Runtime decoding & lookup
 
@@ -178,9 +184,13 @@ Expected size: DAWGs for large English word lists of this size typically land in
 - `isValidWord(word)`: walk the DAWG letter by letter from the root; O(word length), no scanning.
 - `checkWord` (for the standalone lookup tool, Req 7.3) reuses the same function — the UI just surfaces a text input + the boolean result, so no separate dictionary structure is needed for that feature.
 
+### License attribution obligation
+
+SCOWL's permissive license requires its copyright notice to remain attached to any distribution of the word list or lists derived from it. The game's UI should include a small "About / Credits" note referencing `src/dictionary/SOURCE.md` / `SCOWL-COPYRIGHT.txt`, and the repo keeps both files alongside the raw word list rather than only embedding the compiled DAWG blob.
+
 ### Sourcing the word list
 
-The actual CSW word list text file is **not yet included in this repo** — Requirement 7 commits to using Collins Scrabble Words for validation correctness, so `src/dictionary/csw.txt` needs to be sourced from a licensed/legitimate source before the build step can run. This is called out explicitly as a build prerequisite (see Risks).
+**Resolved.** The word list has been generated and committed at `src/dictionary/wordlist-en-gb.txt`, with full provenance and license documentation in `src/dictionary/SOURCE.md`. This is no longer an open risk (see Risks).
 
 ## Turn & Screen State Machine (Requirements 2, 9)
 
@@ -245,7 +255,7 @@ All of the above are pure functions taking `(board, players, pendingPlacements)`
 
 Because all core logic (`moveValidation.js`, `scoring.js`, `bag.js`, `dictionary.js`, `turnReducer.js`) is written as pure functions operating on plain data, it is unit-testable in Node without any DOM/browser:
 
-- **Dictionary**: round-trip tests (encode a small known word list, decode, verify lookups match); plus tests against the real built CSW DAWG for known valid/invalid words and edge cases (2-letter words, words with Q not followed by U, etc., which CSW permits more of than TWL).
+- **Dictionary**: round-trip tests (encode a small known word list, decode, verify lookups match); plus tests against the real built SCOWL-derived DAWG for known valid/invalid words and edge cases (2-letter words, words with Q not followed by U, etc.).
 - **Move validation**: table-driven tests covering first-move-must-cover-center, disconnected placements, non-linear placements, gap detection, crossing-word extraction correctness, blank-tile handling.
 - **Scoring**: known worked examples (including bingo bonus, overlapping multiple multipliers, pre-existing tiles not re-scoring their multiplier).
 - **Bag/distribution**: statistical sanity check (100 tiles total, correct per-letter counts) and shuffle determinism under a seeded PRNG for repeatable test runs.
@@ -254,12 +264,15 @@ Because all core logic (`moveValidation.js`, `scoring.js`, `bag.js`, `dictionary
 
 Build-time correctness (the DAWG construction) is the highest-risk piece of logic and will get the most thorough unit test coverage before trusting it as the sole gatekeeper of word validity.
 
+## Attribution
+
+Word list sourced from [SCOWL / English Speller Database (ESDB)](https://github.com/en-wl/wordlist), Copyright 2000-2026 by Kevin Atkinson, used under its permissive license (see `src/dictionary/SCOWL-COPYRIGHT.txt`). Content and license terms rephrased/summarized here for compliance; full original text preserved verbatim in that file.
+
 ## Risks & Open Items
 
-1. **Word list sourcing.** The actual CSW text file must be obtained from a legitimate source before the dictionary can be built; this blocks `build/make-dawg.js` from running for real until that's resolved. *(Flagging now so it's not a surprise during implementation.)*
+1. ~~Word list sourcing.~~ **Resolved.** Switched from Collins Scrabble Words (commercial, no official open-license distribution) to **SCOWL** (British English, size 70), a permissively-licensed open word list — 126,594 words, generated and committed at `src/dictionary/wordlist-en-gb.txt` with full provenance in `src/dictionary/SOURCE.md`. Accepted tradeoff: this list is smaller than CSW/TWL and will disagree on some edge-case word validity, in exchange for clean licensing.
 2. ~~Viewer app persistence is unverified.~~ **Resolved.** Smoke-tested directly in HTML Viewer Q on the target iPad: `localStorage` survived backgrounding, force-quit/relaunch, and re-importing the file. See Persistence Design above.
 3. ~~App Switcher thumbnail leak.~~ **Accepted, not mitigated (decision made).** iOS captures a screenshot of the WebView content for the App Switcher / multitasking preview, so a rack could theoretically be glimpsed there if backgrounded mid-turn. Explicitly decided not to add `visibilitychange`-based auto-hiding for this — accepted as a minor, low-probability residual risk rather than adding the complexity/UX friction of forcing a re-confirmation on every app switch.
-4. **Final dictionary artifact size** is an estimate until built from the real CSW list; if it lands too large for comfortable handling inside the viewer app, a secondary compression pass (e.g., bit-packing node fields tighter) is the planned mitigation, not a redesign.
-5. **CSW word list licensing.** Collins Scrabble Words is a commercial, copyrighted word list owned by HarperCollins — there is no official free download. Various unofficial text dumps circulate on GitHub/elsewhere with unclear licensing. This needs a conscious decision (buy/license a legitimate copy, substitute a genuinely open-license alternative such as ENABLE or SOWPODS-derived open lists with a documented license, or accept the provenance risk of an unofficial source) before `build/make-dawg.js` is run for real. Called out as the first implementation task so it's decided deliberately rather than defaulted into.
+4. **Final dictionary artifact size** is an estimate until the DAWG build is actually run (Task 6) against the real `wordlist-en-gb.txt`; if it lands too large for comfortable handling inside the viewer app, a secondary compression pass (e.g., bit-packing node fields tighter) is the planned mitigation, not a redesign.
 
 **Status: Design approved.** Proceeding to implementation task breakdown (`tasks.md`).

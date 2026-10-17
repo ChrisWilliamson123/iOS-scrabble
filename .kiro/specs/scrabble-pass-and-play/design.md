@@ -260,12 +260,6 @@ Build-time correctness (the DAWG construction) is the highest-risk piece of logi
 2. ~~Viewer app persistence is unverified.~~ **Resolved.** Smoke-tested directly in HTML Viewer Q on the target iPad: `localStorage` survived backgrounding, force-quit/relaunch, and re-importing the file. See Persistence Design above.
 3. ~~App Switcher thumbnail leak.~~ **Accepted, not mitigated (decision made).** iOS captures a screenshot of the WebView content for the App Switcher / multitasking preview, so a rack could theoretically be glimpsed there if backgrounded mid-turn. Explicitly decided not to add `visibilitychange`-based auto-hiding for this — accepted as a minor, low-probability residual risk rather than adding the complexity/UX friction of forcing a re-confirmation on every app switch.
 4. **Final dictionary artifact size** is an estimate until built from the real CSW list; if it lands too large for comfortable handling inside the viewer app, a secondary compression pass (e.g., bit-packing node fields tighter) is the planned mitigation, not a redesign.
+5. **CSW word list licensing.** Collins Scrabble Words is a commercial, copyrighted word list owned by HarperCollins — there is no official free download. Various unofficial text dumps circulate on GitHub/elsewhere with unclear licensing. This needs a conscious decision (buy/license a legitimate copy, substitute a genuinely open-license alternative such as ENABLE or SOWPODS-derived open lists with a documented license, or accept the provenance risk of an unofficial source) before `build/make-dawg.js` is run for real. Called out as the first implementation task so it's decided deliberately rather than defaulted into.
 
----
-
-Before moving to the implementation task breakdown, two points from the Risks section are worth a decision:
-
-1. **App Switcher rack leak (Risk 3)** — should I add an explicit requirement/behavior that auto-hides the rack (jump to interstitial) whenever the app is backgrounded or loses visibility, so a glance at the iOS App Switcher can't reveal a rack?
-2. **Persistence smoke test** — are you able to do a 2-minute manual check in HTML Viewer Q (a trivial page that writes/reads `localStorage`, background/reopen) before we build the real persistence layer, so the design doesn't bet on unverified behavior? I can produce that tiny test page right now if useful.
-
-Let me know on those two, plus anything else you'd like adjusted in the design, and I'll finalize `design.md` (already written to `.kiro/specs/scrabble-pass-and-play/design.md`) before we move to the task breakdown.
+**Status: Design approved.** Proceeding to implementation task breakdown (`tasks.md`).

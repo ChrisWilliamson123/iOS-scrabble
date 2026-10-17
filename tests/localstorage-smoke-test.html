@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Storage Smoke Test</title>
+<style>
+  body {
+    font-family: -apple-system, system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #1b1b1f;
+    color: #f0f0f0;
+    -webkit-text-size-adjust: 100%;
+  }
+  h1 { font-size: 1.3rem; margin-bottom: 4px; }
+  p.sub { color: #9a9aa5; margin-top: 0; margin-bottom: 24px; font-size: 0.9rem; }
+  .card {
+    background: #2a2a31;
+    border-radius: 12px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .label { font-size: 0.8rem; color: #9a9aa5; text-transform: uppercase; letter-spacing: 0.04em; }
+  .value { font-size: 1.4rem; margin-top: 4px; word-break: break-word; }
+  .ok { color: #35d07f; }
+  .bad { color: #ff6b6b; }
+  button {
+    font-size: 1rem;
+    padding: 14px 20px;
+    border-radius: 10px;
+    border: none;
+    background: #3a7bfd;
+    color: white;
+    width: 100%;
+    margin-top: 8px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button.secondary { background: #44444d; }
+  button:active { opacity: 0.8; }
+  ol { padding-left: 20px; color: #cfcfd6; font-size: 0.95rem; line-height: 1.5; }
+  li { margin-bottom: 10px; }
+  #log {
+    font-family: ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: #9a9aa5;
+    white-space: pre-wrap;
+    max-height: 160px;
+    overflow-y: auto;
+    background: #141418;
+    border-radius: 8px;
+    padding: 10px;
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<h1>🗄️ Storage Smoke Test</h1>
+<p class="sub">Checks whether localStorage survives backgrounding / re-opening this file in HTML Viewer Q.</p>
+
+<div class="card">
+  <div class="label">Write support</div>
+  <div class="value" id="support-result">Checking…</div>
+</div>
+
+<div class="card">
+  <div class="label">Stored value found on this load</div>
+  <div class="value" id="load-result">Checking…</div>
+</div>
+
+<div class="card">
+  <div class="label">Visit counter (increments each load)</div>
+  <div class="value" id="counter-result">–</div>
+</div>
+
+<button id="write-btn">Write a fresh test value now</button>
+<button id="clear-btn" class="secondary">Clear stored value</button>
+
+<div class="card" style="margin-top:20px;">
+  <div class="label">How to use this test</div>
+  <ol>
+    <li>Open this file in HTML Viewer Q. Note the "Visit counter" value below.</li>
+    <li>Fully background the app (Home button / swipe up), wait a few seconds, then reopen it — <b>do not re-tap the file</b>, just bring the app back to foreground. Reload this same screen if needed and check the counter stayed the same (didn't reset) and "Stored value found" still shows the same timestamp.</li>
+    <li>Force-quit HTML Viewer Q entirely (swipe away in the App Switcher), then reopen the app and re-navigate to this same file. Check again.</li>
+    <li>As the toughest test: re-import this exact file into HTML Viewer Q via Files/iCloud Drive again (as if it were updated), then open it. Check whether the counter/timestamp survived or reset to zero/missing.</li>
+  </ol>
+  <p style="color:#9a9aa5; font-size:0.85rem;">If the value survives steps 2–3 but resets on step 4, that tells us localStorage persists across app restarts but NOT across re-importing the file — useful either way, since the real game will rarely be re-imported mid-match.</p>
+</div>
+
+<div id="log"></div>
+
+<script>
+  var KEY = 'scrabble_smoke_test_v1';
+  var logEl = document.getElementById('log');
+
+  function log(msg) {
+    var t = new Date().toLocaleTimeString();
+    logEl.textContent = '[' + t + '] ' + msg + '\n' + logEl.textContent;
+  }
+
+  function renderSupport(ok, detail) {
+    var el = document.getElementById('support-result');
+    el.textContent = ok ? '✅ Working' : '❌ Failed: ' + detail;
+    el.className = 'value ' + (ok ? 'ok' : 'bad');
+  }
+
+  function renderLoad(found, data) {
+    var el = document.getElementById('load-result');
+    if (found) {
+      el.textContent = '✅ Found — written at ' + data.writtenAt;
+      el.className = 'value ok';
+    } else {
+      el.textContent = '⚠️ Nothing stored yet (expected on first run)';
+      el.className = 'value bad';
+    }
+  }
+
+  function renderCounter(n) {
+    document.getElementById('counter-result').textContent = n;
+  }
+
+  function writeValue(bumpCounter) {
+    try {
+      var existingRaw = localStorage.getItem(KEY);
+      var existing = existingRaw ? JSON.parse(existingRaw) : null;
+      var counter = bumpCounter ? ((existing && existing.counter) || 0) + 1 : ((existing && existing.counter) || 0);
+      var payload = {
+        writtenAt: new Date().toISOString(),
+        counter: counter,
+        ua: navigator.userAgent
+      };
+      localStorage.setItem(KEY, JSON.stringify(payload));
+      log('Wrote value, counter=' + counter);
+      return payload;
+    } catch (e) {
+      log('WRITE FAILED: ' + e.message);
+      return null;
+    }
+  }
+
+  function loadValue() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (!raw) {
+        log('No existing value found in localStorage.');
+        return null;
+      }
+      var parsed = JSON.parse(raw);
+      log('Loaded existing value, counter=' + parsed.counter + ', writtenAt=' + parsed.writtenAt);
+      return parsed;
+    } catch (e) {
+      log('READ FAILED: ' + e.message);
+      return null;
+    }
+  }
+
+  function init() {
+    // 1. Check basic read/write support with a throwaway key.
+    var supportOk = false;
+    var supportDetail = '';
+    try {
+      var testKey = '__support_check__';
+      localStorage.setItem(testKey, '1');
+      var readBack = localStorage.getItem(testKey);
+      localStorage.removeItem(testKey);
+      supportOk = readBack === '1';
+      if (!supportOk) supportDetail = 'write succeeded but read-back mismatched';
+    } catch (e) {
+      supportDetail = e.message;
+    }
+    renderSupport(supportOk, supportDetail);
+
+    if (!supportOk) {
+      renderLoad(false, null);
+      renderCounter('n/a');
+      log('localStorage unsupported in this context — persistence design must rely on manual export/import only.');
+      return;
+    }
+
+    // 2. Load whatever was there from a previous visit (before we touch it).
+    var existing = loadValue();
+    renderLoad(!!existing, existing);
+    renderCounter(existing ? existing.counter : 0);
+
+    // 3. Auto-bump the counter on every load so repeated opens are visible.
+    var updated = writeValue(true);
+    if (updated) renderCounter(updated.counter);
+  }
+
+  document.getElementById('write-btn').addEventListener('click', function () {
+    var updated = writeValue(true);
+    if (updated) {
+      renderLoad(true, updated);
+      renderCounter(updated.counter);
+    }
+  });
+
+  document.getElementById('clear-btn').addEventListener('click', function () {
+    try {
+      localStorage.removeItem(KEY);
+      log('Cleared stored value.');
+      renderLoad(false, null);
+      renderCounter(0);
+    } catch (e) {
+      log('CLEAR FAILED: ' + e.message);
+    }
+  });
+
+  document.addEventListener('visibilitychange', function () {
+    log('visibilitychange -> ' + document.visibilityState);
+  });
+
+  init();
+</script>
+
+</body>
+</html>

@@ -184,6 +184,22 @@ test('game end: bag empty + rack emptied ends game and applies end-game score ad
   assert.strictEqual(next.players[activeIdx].score, 10 + 20); // 10 from the move itself + 20 bonus
 });
 
+test('confirmHandoff transitions AWAITING_HANDOFF_CONFIRM to PLAYER_TURN', () => {
+  const state = freshState();
+  assert.strictEqual(state.turnPhase, 'AWAITING_HANDOFF_CONFIRM');
+  const result = TurnReducer.confirmHandoff(state);
+  assert.ok(result.state);
+  assert.strictEqual(result.state.turnPhase, 'PLAYER_TURN');
+});
+
+test('confirmHandoff rejected if not currently awaiting handoff', () => {
+  const state = freshState();
+  const confirmed = TurnReducer.confirmHandoff(state).state;
+  const result = TurnReducer.confirmHandoff(confirmed); // already PLAYER_TURN, confirm again
+  assert.ok(result.error);
+  assert.strictEqual(result.error.reason, 'NOT_AWAITING_HANDOFF');
+});
+
 test('end-to-end scripted game: plays to completion via consecutive passes and checks final state', () => {
   let state = freshState({ seed: 55 });
   const p0ScoreStart = state.players[0].score;

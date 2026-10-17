@@ -205,12 +205,50 @@
     return passResult;
   }
 
+  // Lightweight staging update: replaces pendingPlacements with no validation. Used while
+  // the player is still arranging tiles on the board, before Submit is pressed. Also removes
+  // the staged tiles from the displayed rack is handled by the renderer (rack shows only
+  // tiles NOT currently staged), so the rack array itself is untouched here.
+  function updatePendingPlacements(state, newPendingPlacements) {
+    var next = cloneState(state);
+    next.pendingPlacements = newPendingPlacements.slice();
+    return { state: next };
+  }
+
+  // Reorders the active player's rack tiles for display purposes (pure cosmetic, no rule
+  // implications). fromIndex/toIndex are indices into the rack array.
+  function reorderRack(state, fromIndex, toIndex) {
+    var next = cloneState(state);
+    var rack = next.players[next.activePlayerIndex].rack;
+    if (fromIndex < 0 || fromIndex >= rack.length || toIndex < 0 || toIndex >= rack.length) {
+      return { error: { valid: false, reason: 'INVALID_TILE_INDEX' } };
+    }
+    var tile = rack.splice(fromIndex, 1)[0];
+    rack.splice(toIndex, 0, tile);
+    return { state: next };
+  }
+
+  // Transitions from the handoff interstitial into the active player's turn. This is the
+  // ONLY path by which a rack becomes visible (Req 2.1/2.2) -- it never happens automatically.
+  function confirmHandoff(state) {
+    if (state.turnPhase !== 'AWAITING_HANDOFF_CONFIRM') {
+      return { error: { valid: false, reason: 'NOT_AWAITING_HANDOFF' } };
+    }
+    var next = cloneState(state);
+    next.turnPhase = 'PLAYER_TURN';
+    next.timerRemainingSec = next.timerConfig.durationSec;
+    return { state: next };
+  }
+
   var TurnReducer = {
     PASS_ROUNDS_TO_END: PASS_ROUNDS_TO_END,
     applyMove: applyMove,
     applyPass: applyPass,
     applyExchange: applyExchange,
     applyTimeout: applyTimeout,
+    confirmHandoff: confirmHandoff,
+    updatePendingPlacements: updatePendingPlacements,
+    reorderRack: reorderRack,
     // exported for tests:
     checkGameEnd: checkGameEnd
   };

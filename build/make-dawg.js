@@ -32,8 +32,23 @@ function main() {
 
   console.log(`Read ${words.length} words (skipped ${skipped} non-alphabetic lines).`);
 
+  // Known SCOWL data-quality quirk: every single letter A-Z appears in the source list
+  // (leftover from initials/abbreviation entries), but in real English/Scrabble only
+  // "A" and "I" are valid standalone single-letter words. Filter the rest out so e.g.
+  // "W" alone can't be played as a word. See src/dictionary/SOURCE.md for this caveat.
+  const VALID_SINGLE_LETTER_WORDS = new Set(['A', 'I']);
+  let singleLetterRemoved = 0;
+  const filteredWords = words.filter((w) => {
+    if (w.length === 1 && !VALID_SINGLE_LETTER_WORDS.has(w)) {
+      singleLetterRemoved++;
+      return false;
+    }
+    return true;
+  });
+  console.log(`Removed ${singleLetterRemoved} invalid single-letter entries (kept only A, I).`);
+
   // De-duplicate defensively (the source list shouldn't have dupes, but build-time dedupe is cheap insurance).
-  const uniqueWords = Array.from(new Set(words));
+  const uniqueWords = Array.from(new Set(filteredWords));
   if (uniqueWords.length !== words.length) {
     console.log(`Removed ${words.length - uniqueWords.length} duplicate entries.`);
   }
@@ -55,8 +70,8 @@ function main() {
 
   // Quick sanity spot-check: decode what we just wrote and verify a handful of known words.
   const decoded = Dawg.loadFromBase64(result.base64);
-  const sampleValid = ['THE', 'SCRABBLE', 'QUIZ', 'ZEBRA', 'A', 'OX'];
-  const sampleInvalid = ['ZZZZZ', 'QX', 'NOTAREALWORDXYZ'];
+  const sampleValid = ['THE', 'SCRABBLE', 'QUIZ', 'ZEBRA', 'A', 'I', 'OX'];
+  const sampleInvalid = ['ZZZZZ', 'QX', 'NOTAREALWORDXYZ', 'W', 'B', 'Z'];
   let ok = true;
   for (const w of sampleValid) {
     const found = Dawg.lookup(decoded, w);

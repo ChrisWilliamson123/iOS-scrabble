@@ -27,6 +27,15 @@ test('known invalid strings are rejected', () => {
   }
 });
 
+test('only A and I are valid single-letter words (SCOWL data-quality fix)', () => {
+  assert.ok(Dictionary.isValidWord('A'));
+  assert.ok(Dictionary.isValidWord('I'));
+  const invalidSingles = ['B', 'W', 'Z', 'Q', 'X'];
+  for (const w of invalidSingles) {
+    assert.ok(!Dictionary.isValidWord(w), `expected single letter ${w} to be invalid`);
+  }
+});
+
 test('2-letter word edge cases', () => {
   // Common valid Scrabble-style 2-letter words.
   const valid = ['OX', 'AT', 'IN', 'ON', 'TO', 'GO', 'SO', 'IT'];

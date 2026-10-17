@@ -6,7 +6,7 @@ This document describes the technical design for a single-file HTML Scrabble gam
 
 Two important platform constraints drive much of this design:
 
-1. **Unknown/limited persistence guarantees.** Lightweight local-HTML viewer apps wrap a WebView, and some do not guarantee a stable, persistent storage origin across file re-imports, app updates, or even app restarts (some reset the WebView's storage container when the file is re-opened via "Files" import). We cannot verify the specific persistence behavior of the viewer app in advance, so the design treats `localStorage` as a **best-effort cache**, not a guaranteed store, and adds an explicit manual export/import (JSON) fallback so a game is never unrecoverable.
+1. **Persistence — verified.** A dedicated smoke test (`tests/localstorage-smoke-test.html`) was run on the actual target app, HTML Viewer Q, on iPad. `localStorage` was confirmed to survive app backgrounding, full force-quit + relaunch, and even re-importing the same file from Files/iCloud Drive (a counter value persisted and kept incrementing across all of these). This means `localStorage` can be treated as a **reliable primary store**, not just a best-effort cache. A manual export/import (JSON) feature is still included (see Persistence Design) as a convenience for moving a save between devices and as cheap insurance, but it is no longer load-bearing for basic "don't lose my game" correctness.
 2. **No network, no bundler at runtime.** Everything the browser loads must already be inside the one `.html` file. This pushes word-list compression and any "build tooling" to a **build-time step** that produces the final shippable artifact — there is no runtime npm/webpack. The repo will contain source files for maintainability; a small Node build script concatenates/encodes them into the single distributable HTML file.
 
 ## Architecture
@@ -225,13 +225,13 @@ All of the above are pure functions taking `(board, players, pendingPlacements)`
 4. If `pendingPlacements.length === 7` (i.e., the entire rack was used), add 50.
 5. End-of-game adjustment (triggered by the reducer when a game-over condition is detected): for each player, subtract the point value of tiles remaining in their rack from their score; if the game ended specifically because a player emptied their rack, add the sum of the *other* player's remaining tile values to the emptying player's score (not simply a mirrored subtraction — this matches standard Scrabble end-game rules).
 
-## Persistence Design (Requirement 1.4, and the viewer-app risk noted above)
+## Persistence Design (Requirement 1.4 — verified against the real viewer app)
 
-Layered strategy, from most to least automatic:
+**Verified:** a smoke test confirmed `localStorage` in HTML Viewer Q survives app backgrounding, force-quit + relaunch, and re-importing the same file. The design below treats it as the reliable primary store accordingly.
 
 1. **Primary: `localStorage`.** On every state change, debounce-save the serialized `gameState` (JSON) under a versioned key (`scrabble_save_v1`). On boot, attempt to load and parse it; validate the `version` field for forward-compatibility.
-2. **Fallback detection:** if `localStorage` is unavailable, throws, or silently fails to round-trip (write-then-immediately-read-back check at boot), the game still runs fully in-memory for the session but surfaces a persistent, dismissible banner: *"Auto-save isn't available in this viewer — use Export before closing."*
-3. **Manual Export/Import (always available, not just a fallback):** a toolbar action serializes `gameState` to a JSON string and presents it via a `<textarea>` + "Copy" button (and, since there's no network, this is the most reliable device-independent path — the user can paste it into Notes, iCloud, etc. and paste it back into the Import box next session). This also doubles as a way to move a game between devices, which isn't a stated requirement but costs nothing extra given the export already exists.
+2. **Defensive fallback (retained as cheap insurance, not because it's expected to trigger):** if `localStorage` is unavailable, throws, or fails a write-then-read-back check at boot (e.g., a future viewer app, or Private Browsing-style restrictions), the game still runs fully in-memory for the session and surfaces a dismissible banner: *"Auto-save isn't available in this viewer — use Export before closing."*
+3. **Manual Export/Import (convenience feature):** a toolbar action serializes `gameState` to a JSON string and presents it via a `<textarea>` + "Copy" button, letting a save be moved between devices or backed up externally (e.g., pasted into Notes/iCloud). No longer required for correctness given (1) is verified reliable, but low-cost to keep.
 4. Each reducer-driven state change writes to the in-memory store synchronously and to `localStorage` asynchronously/debounced (e.g., 300ms after the last change) — so rapid tile placement during rack arrangement doesn't thrash storage writes, while a submitted move is flushed immediately (not debounced) since it's the point most worth not losing.
 
 ## Error Handling
@@ -256,7 +256,7 @@ Build-time correctness (the DAWG construction) is the highest-risk piece of logi
 ## Risks & Open Items
 
 1. **Word list sourcing.** The actual CSW text file must be obtained from a legitimate source before the dictionary can be built; this blocks `build/make-dawg.js` from running for real until that's resolved. *(Flagging now so it's not a surprise during implementation.)*
-2. **Viewer app persistence is unverified.** We don't have confirmed documentation that this specific HTML viewer app preserves `localStorage` across sessions/re-imports. The design mitigates this with the export/import fallback, but this should be smoke-tested early (write a trivial `localStorage` test page, close/reopen the app, confirm) rather than discovered late.
+2. ~~Viewer app persistence is unverified.~~ **Resolved.** Smoke-tested directly in HTML Viewer Q on the target iPad: `localStorage` survived backgrounding, force-quit/relaunch, and re-importing the file. See Persistence Design above.
 3. **App Switcher thumbnail leak.** iOS captures a screenshot of the WebView content for the App Switcher / multitasking preview. If a player backgrounds the app mid-turn with their rack visible, the other player could glimpse it in the task switcher. Mitigation to consider in implementation: listen for `visibilitychange`/`pagehide` and immediately swap the visible screen to the Interstitial (hiding the rack) whenever the page is hidden, restoring only after an explicit re-confirmation. Flagging as a design-level requirement add-on rather than deciding silently — see question below.
 4. **Final dictionary artifact size** is an estimate until built from the real CSW list; if it lands too large for comfortable handling inside the viewer app, a secondary compression pass (e.g., bit-packing node fields tighter) is the planned mitigation, not a redesign.
 

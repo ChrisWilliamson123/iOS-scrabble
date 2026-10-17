@@ -264,6 +264,7 @@ html, body {
 
 .game-header__score--active { font-weight: 700; color: #3a7bfd; }
 .game-header__timer { font-size: 0.95rem; font-weight: 600; }
+.game-header__zoom { display: flex; gap: 4px; }
 
 /* ---- Scoreboard (interstitial / game over) ----------------------------------------------- */
 

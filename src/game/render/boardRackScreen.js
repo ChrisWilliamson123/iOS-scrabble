@@ -55,6 +55,10 @@
       state.timerConfig.enabled
         ? Dom.el('div', { class: 'game-header__timer' }, ['\u23f1 ' + state.timerRemainingSec + 's'])
         : null,
+      Dom.el('div', { class: 'game-header__zoom' }, [
+        Dom.el('button', { class: 'btn btn--icon', type: 'button', onClick: function () { options.onZoom(-1); }, 'aria-label': 'Zoom out' }, ['\u2212']),
+        Dom.el('button', { class: 'btn btn--icon', type: 'button', onClick: function () { options.onZoom(1); }, 'aria-label': 'Zoom in' }, ['+'])
+      ]),
       Dom.el('button', { class: 'btn btn--icon', type: 'button', onClick: options.onOpenDictLookup, 'aria-label': 'Dictionary lookup' }, ['\ud83d\udcd6'])
     ]);
 
@@ -63,6 +67,7 @@
       pendingPlacements: pending,
       interactive: true,
       zoomWrapper: true,
+      zoomLevel: ui.zoomLevel || 1,
       onTapEmpty: function (row, col) { options.onTapEmptyBoardCell(row, col); },
       onTapPending: function (row, col) { options.onRecallPendingTile(row, col); }
     });
@@ -112,6 +117,7 @@
       return Dom.el('div', { class: 'rack__slot' }, [
         TileComponent.renderTile({
           letter: letter,
+          isBlank: letter === TileData.BLANK_MARKER,
           selected: isSelected,
           onTap: function () { options.onToggleExchangeTile(idx); }
         })

@@ -6,6 +6,7 @@
 
   var Dom = typeof module !== 'undefined' && module.exports ? require('../dom.js') : global.Scrabble.Dom;
   var TileComponent = typeof module !== 'undefined' && module.exports ? require('./tile.js') : global.Scrabble.TileComponent;
+  var TileData = typeof module !== 'undefined' && module.exports ? require('../../tileData.js') : global.Scrabble.TileData;
 
   // options: { rack: [letters], usedIndices: Set-like (array) of rack indices already
   //            placed pending on the board, selectedIndex: number|null, onSelect, onSwap }
@@ -22,7 +23,7 @@
       return Dom.el('div', { class: 'rack__slot' }, [
         TileComponent.renderTile({
           letter: letter,
-          isBlank: false,
+          isBlank: letter === TileData.BLANK_MARKER,
           selected: selectedIndex === idx,
           onTap: function () { options.onSelect(idx); }
         })

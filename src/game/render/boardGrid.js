@@ -37,9 +37,17 @@
 
     if (!options.zoomWrapper) return grid;
 
-    // Pan/zoom wrapper: CSS-transform based, activated via a toggle class the caller can
-    // flip when computed cell size falls below the minimum (see styles.css / main.js).
-    return Dom.el('div', { class: 'board-zoom-wrapper', id: 'board-zoom-wrapper' }, [grid]);
+    // Pan/zoom wrapper: CSS-transform based scale, driven by a manual +/- control (Req 4.3
+    // allows "pinch-to-zoom and/or pan gestures, OR an equivalent zoom control" -- a
+    // manual control is used here since it's reliable and testable without custom gesture
+    // code). The wrapper scrolls (via .board-wrapper's overflow:auto) when scaled up beyond
+    // the viewport, giving pan-equivalent behavior through native scrolling.
+    var zoomLevel = options.zoomLevel || 1;
+    return Dom.el('div', {
+      class: 'board-zoom-wrapper',
+      id: 'board-zoom-wrapper',
+      style: { transform: 'scale(' + zoomLevel + ')' }
+    }, [grid]);
   }
 
   var BoardGrid = { renderBoardGrid: renderBoardGrid };

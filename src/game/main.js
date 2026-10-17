@@ -21,7 +21,8 @@
       exchangeSelectedIndices: [],
       blankPrompt: null, // { row, col } when awaiting a letter choice for a placed blank
       dictLookupOpen: false,
-      loadError: null
+      loadError: null,
+      zoomLevel: 1 // manual zoom control (Req 4.3); clamped to [0.6, 2] in handleZoom
     };
 
     var saveDebounceHandle = null;
@@ -186,6 +187,12 @@
       render();
     }
 
+    function handleZoom(direction) {
+      var next = (ui.zoomLevel || 1) + direction * 0.2;
+      ui.zoomLevel = Math.max(0.6, Math.min(2, next));
+      render();
+    }
+
     function handleOpenDictLookup() {
       ui.dictLookupOpen = true;
       render();
@@ -204,7 +211,7 @@
 
     function handleNewGame() {
       gameState = null;
-      ui = { selectedRackIndex: null, pendingPlacements: [], lastError: null, exchangeMode: false, exchangeSelectedIndices: [], blankPrompt: null, dictLookupOpen: false, loadError: null };
+      ui = { selectedRackIndex: null, pendingPlacements: [], lastError: null, exchangeMode: false, exchangeSelectedIndices: [], blankPrompt: null, dictLookupOpen: false, loadError: null, zoomLevel: 1 };
       timer.stop();
       S.Persistence.clear();
       render();
@@ -251,6 +258,7 @@
           onConfirmExchange: handleConfirmExchange,
           onCancelExchange: handleCancelExchange,
           onOpenDictLookup: handleOpenDictLookup,
+          onZoom: handleZoom,
           onAssignBlankLetter: handleAssignBlankLetter,
           onCancelBlankPrompt: handleCancelBlankPrompt
         });

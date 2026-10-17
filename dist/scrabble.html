@@ -271,6 +271,7 @@ html, body {
 
 .game-header__score--active { font-weight: 700; color: #3a7bfd; }
 .game-header__timer { font-size: 0.95rem; font-weight: 600; }
+.game-header__zoom { display: flex; gap: 4px; }
 
 /* ---- Scoreboard (interstitial / game over) ----------------------------------------------- */
 
@@ -2029,6 +2030,7 @@ html, body {
 
   var Dom = typeof module !== 'undefined' && module.exports ? require('../dom.js') : global.Scrabble.Dom;
   var TileComponent = typeof module !== 'undefined' && module.exports ? require('./tile.js') : global.Scrabble.TileComponent;
+  var TileData = typeof module !== 'undefined' && module.exports ? require('../../tileData.js') : global.Scrabble.TileData;
 
   // options: { rack: [letters], usedIndices: Set-like (array) of rack indices already
   //            placed pending on the board, selectedIndex: number|null, onSelect, onSwap }
@@ -2045,7 +2047,7 @@ html, body {
       return Dom.el('div', { class: 'rack__slot' }, [
         TileComponent.renderTile({
           letter: letter,
-          isBlank: false,
+          isBlank: letter === TileData.BLANK_MARKER,
           selected: selectedIndex === idx,
           onTap: function () { options.onSelect(idx); }
         })
@@ -2106,9 +2108,17 @@ html, body {
 
     if (!options.zoomWrapper) return grid;
 
-    // Pan/zoom wrapper: CSS-transform based, activated via a toggle class the caller can
-    // flip when computed cell size falls below the minimum (see styles.css / main.js).
-    return Dom.el('div', { class: 'board-zoom-wrapper', id: 'board-zoom-wrapper' }, [grid]);
+    // Pan/zoom wrapper: CSS-transform based scale, driven by a manual +/- control (Req 4.3
+    // allows "pinch-to-zoom and/or pan gestures, OR an equivalent zoom control" -- a
+    // manual control is used here since it's reliable and testable without custom gesture
+    // code). The wrapper scrolls (via .board-wrapper's overflow:auto) when scaled up beyond
+    // the viewport, giving pan-equivalent behavior through native scrolling.
+    var zoomLevel = options.zoomLevel || 1;
+    return Dom.el('div', {
+      class: 'board-zoom-wrapper',
+      id: 'board-zoom-wrapper',
+      style: { transform: 'scale(' + zoomLevel + ')' }
+    }, [grid]);
   }
 
   var BoardGrid = { renderBoardGrid: renderBoardGrid };
@@ -2419,6 +2429,10 @@ html, body {
       state.timerConfig.enabled
         ? Dom.el('div', { class: 'game-header__timer' }, ['\u23f1 ' + state.timerRemainingSec + 's'])
         : null,
+      Dom.el('div', { class: 'game-header__zoom' }, [
+        Dom.el('button', { class: 'btn btn--icon', type: 'button', onClick: function () { options.onZoom(-1); }, 'aria-label': 'Zoom out' }, ['\u2212']),
+        Dom.el('button', { class: 'btn btn--icon', type: 'button', onClick: function () { options.onZoom(1); }, 'aria-label': 'Zoom in' }, ['+'])
+      ]),
       Dom.el('button', { class: 'btn btn--icon', type: 'button', onClick: options.onOpenDictLookup, 'aria-label': 'Dictionary lookup' }, ['\ud83d\udcd6'])
     ]);
 
@@ -2427,6 +2441,7 @@ html, body {
       pendingPlacements: pending,
       interactive: true,
       zoomWrapper: true,
+      zoomLevel: ui.zoomLevel || 1,
       onTapEmpty: function (row, col) { options.onTapEmptyBoardCell(row, col); },
       onTapPending: function (row, col) { options.onRecallPendingTile(row, col); }
     });
@@ -2476,6 +2491,7 @@ html, body {
       return Dom.el('div', { class: 'rack__slot' }, [
         TileComponent.renderTile({
           letter: letter,
+          isBlank: letter === TileData.BLANK_MARKER,
           selected: isSelected,
           onTap: function () { options.onToggleExchangeTile(idx); }
         })
@@ -2550,7 +2566,8 @@ html, body {
       exchangeSelectedIndices: [],
       blankPrompt: null, // { row, col } when awaiting a letter choice for a placed blank
       dictLookupOpen: false,
-      loadError: null
+      loadError: null,
+      zoomLevel: 1 // manual zoom control (Req 4.3); clamped to [0.6, 2] in handleZoom
     };
 
     var saveDebounceHandle = null;
@@ -2715,6 +2732,12 @@ html, body {
       render();
     }
 
+    function handleZoom(direction) {
+      var next = (ui.zoomLevel || 1) + direction * 0.2;
+      ui.zoomLevel = Math.max(0.6, Math.min(2, next));
+      render();
+    }
+
     function handleOpenDictLookup() {
       ui.dictLookupOpen = true;
       render();
@@ -2733,7 +2756,7 @@ html, body {
 
     function handleNewGame() {
       gameState = null;
-      ui = { selectedRackIndex: null, pendingPlacements: [], lastError: null, exchangeMode: false, exchangeSelectedIndices: [], blankPrompt: null, dictLookupOpen: false, loadError: null };
+      ui = { selectedRackIndex: null, pendingPlacements: [], lastError: null, exchangeMode: false, exchangeSelectedIndices: [], blankPrompt: null, dictLookupOpen: false, loadError: null, zoomLevel: 1 };
       timer.stop();
       S.Persistence.clear();
       render();
@@ -2780,6 +2803,7 @@ html, body {
           onConfirmExchange: handleConfirmExchange,
           onCancelExchange: handleCancelExchange,
           onOpenDictLookup: handleOpenDictLookup,
+          onZoom: handleZoom,
           onAssignBlankLetter: handleAssignBlankLetter,
           onCancelBlankPrompt: handleCancelBlankPrompt
         });
